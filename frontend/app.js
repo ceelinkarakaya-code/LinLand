@@ -1,5 +1,5 @@
 // Backend'inizi deploy ettikten sonra bu adresi güncelleyin.
-   const API_URL = window.API_URL || "https://linland.onrender.com";
+const API_URL = window.API_URL || "https://linland.onrender.com";
 
 const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 
@@ -26,6 +26,12 @@ let currentFile = null;
 let uploadBlob = null; // tarayıcıda küçültülmüş, yüklenecek asıl dosya
 let synth, padSynth, filter, distortion, sequence, chordPart, analyser;
 let kickSynth, snareSynth, hihatSynth, kickSeq, snareSeq, hihatSeq;
+let isProcessing = false; // aynı anda birden fazla analiz/oynatma kurulumunun
+                           // çakışıp "already disposed" hatasına yol açmasını önler
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 // Render'ın ücretsiz sunucusu 15 dk kullanılmayınca uykuya geçiyor ve
 // ilk isteği yanıtlaması 50+ saniye sürebiliyor. Sayfa açılır açılmaz
@@ -118,7 +124,22 @@ function resizeImage(file, maxDimension) {
 
 // ---------- backend isteği ----------
 
-async function analyzeAndLoad(regenerate, attempt = 1) {
+async function analyzeAndLoad(regenerate) {
+  // önceki istek hâlâ işleniyorsa (fetch, retry veya buildPlayback sürüyorsa)
+  // yeni bir istek başlatma — bu, iki kurulumun üst üste binip birbirinin
+  // ses nesnelerini silmesini (Tone.js "already disposed" hatası) önler.
+  if (isProcessing) return;
+  isProcessing = true;
+  el.genreSelect.disabled = true;
+  try {
+    await runAnalysis(regenerate, 1);
+  } finally {
+    isProcessing = false;
+    el.genreSelect.disabled = false;
+  }
+}
+
+async function runAnalysis(regenerate, attempt) {
   if (!currentFile) return;
   setStatus(
     attempt === 1
@@ -159,8 +180,8 @@ async function analyzeAndLoad(regenerate, attempt = 1) {
     // zaman aşımımız) hariç, ilk 2 denemede otomatik olarak tekrar deneriz.
     const isTransientNetworkError = err.name !== "AbortError";
     if (isTransientNetworkError && attempt < 3) {
-      setTimeout(() => analyzeAndLoad(regenerate, attempt + 1), 3000);
-      return;
+      await sleep(3000);
+      return runAnalysis(regenerate, attempt + 1);
     }
 
     if (err.name === "AbortError") {
