@@ -70,7 +70,30 @@ el.dropzone.addEventListener("drop", (e) => {
   if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
 });
 
+// ---------- eşzamanlı işlem kilidi ----------
+// Fotoğraf küçültme + analiz + ses kurulumunun tamamını tek bir "meşgul"
+// bayrağı altında topluyoruz. Böylece art arda hızlı fotoğraf seçmek,
+// tarz değiştirmek veya "yeniden karıştır"a basmak birbirini asla
+// çakıştırmıyor -- ikinci girişim, birincisi bitene kadar sessizce yok sayılır.
+
+function beginProcessing() {
+  if (isProcessing) return false;
+  isProcessing = true;
+  el.genreSelect.disabled = true;
+  return true;
+}
+
+function endProcessing() {
+  isProcessing = false;
+  el.genreSelect.disabled = false;
+}
+
 function handleFile(file) {
+  if (!beginProcessing()) {
+    setStatus("önceki fotoğraf hâlâ işleniyor — birazdan tekrar deneyin");
+    return;
+  }
+
   currentFile = file;
   el.preview.src = URL.createObjectURL(file);
   el.preview.hidden = false;
@@ -83,14 +106,14 @@ function handleFile(file) {
   resizeImage(file, 1024)
     .then((blob) => {
       uploadBlob = blob;
-      analyzeAndLoad(true);
     })
     .catch((err) => {
       console.error(err);
       // küçültme başarısız olursa orijinal dosyayla devam et
       uploadBlob = file;
-      analyzeAndLoad(true);
-    });
+    })
+    .then(() => runAnalysis(true, 1))
+    .finally(() => endProcessing());
 }
 
 // Telefon kameralarından gelen büyük fotoğrafları (birkaç MB) yüklemeden
@@ -128,14 +151,11 @@ async function analyzeAndLoad(regenerate) {
   // önceki istek hâlâ işleniyorsa (fetch, retry veya buildPlayback sürüyorsa)
   // yeni bir istek başlatma — bu, iki kurulumun üst üste binip birbirinin
   // ses nesnelerini silmesini (Tone.js "already disposed" hatası) önler.
-  if (isProcessing) return;
-  isProcessing = true;
-  el.genreSelect.disabled = true;
+  if (!beginProcessing()) return;
   try {
     await runAnalysis(regenerate, 1);
   } finally {
-    isProcessing = false;
-    el.genreSelect.disabled = false;
+    endProcessing();
   }
 }
 
