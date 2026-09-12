@@ -50,6 +50,33 @@ body {
   margin: 6px 0 0;
 }
 
+/* ---------- tarz seçici ---------- */
+.genre-picker {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 24px;
+  font-family: var(--mono);
+}
+.genre-picker label {
+  font-size: 0.82rem;
+  color: var(--paper-dim);
+}
+.genre-picker select {
+  background: var(--bg-elev);
+  color: var(--gold);
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  padding: 8px 12px;
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.genre-picker select:focus {
+  outline: 1px solid var(--safelight-bright);
+  outline-offset: 2px;
+}
+
 /* ---------- tepsi + kadran satırı ---------- */
 .tray-row {
   display: grid;
@@ -97,16 +124,19 @@ body {
 }
 
 .tray-hint {
-  position: relative;
+  position: absolute;
+  inset: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 10px;
   font-family: var(--mono);
   font-size: 0.85rem;
   color: var(--paper-dim);
   text-align: center;
   padding: 0 24px;
+  cursor: pointer;
 }
 .tray-hint-or { font-size: 0.7rem; opacity: 0.6; }
 

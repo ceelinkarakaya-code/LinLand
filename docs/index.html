@@ -13,8 +13,22 @@
 
     <header class="masthead">
       <h1>Karanlık Oda</h1>
-      <p class="masthead-sub">Gözlerini kapat, anıların çalsın.</p>
+      <p class="masthead-sub">bir fotoğrafı sese banyo edin</p>
     </header>
+
+    <section class="genre-picker">
+      <label for="genre-select">notalarınızı nasıl duymak istersiniz?</label>
+      <select id="genre-select">
+        <option value="soft" selected>soft (klasik)</option>
+        <option value="rock">rock</option>
+        <option value="anadolu_rock">anadolu rock</option>
+        <option value="heavy_metal">heavy metal</option>
+        <option value="jazz">jazz</option>
+        <option value="pop">pop</option>
+        <option value="blues">blues</option>
+        <option value="dj">dj</option>
+      </select>
+    </section>
 
     <main class="tray-row">
 
@@ -22,14 +36,12 @@
       <section class="tray" id="dropzone">
         <div class="tray-liquid"></div>
         <img id="preview" class="tray-photo" alt="" hidden />
-        <div class="tray-hint" id="tray-hint">
+        <label class="tray-hint" id="tray-hint" for="file-input">
           <span>bir fotoğraf sürükleyin</span>
           <span class="tray-hint-or">— ya da —</span>
-          <label class="tray-button">
-            dosya seçin
-            <input type="file" id="file-input" accept="image/*" hidden />
-          </label>
-        </div>
+          <span class="tray-button">dosya seçin</span>
+        </label>
+        <input type="file" id="file-input" accept="image/*" hidden />
       </section>
 
       <!-- SAĞ: pozometre / analiz kadranı -->
@@ -51,6 +63,10 @@
         <div class="meter-row">
           <span class="meter-label">kök nota</span>
           <span class="meter-value" id="val-root">—</span>
+        </div>
+        <div class="meter-row">
+          <span class="meter-label">ritim</span>
+          <span class="meter-value" id="val-rhythm-style">—</span>
         </div>
 
         <div class="swatches" id="swatches"></div>
