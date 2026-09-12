@@ -273,9 +273,15 @@ function buildDrumPattern(style, steps = 16) {
     for (let i = 0; i < steps; i += 2) kick[i] = 1;
     snare[4] = 1; snare[12] = 1;
     for (let i = 0; i < steps; i++) hihat[i] = 1;
-  } else if (style === "shuffle" || style === "swing") {
-    for (let i = 0; i < steps; i += 3) kick[i] = 1;
-    snare[6] = 1; snare[14] = 1;
+  } else if (style === "swing") {
+    // jazz: seyrek kick, ride-hat ağırlıklı, süpürgeli snare hissi
+    kick[0] = 1;
+    snare[4] = 1; snare[12] = 1;
+    for (let i = 0; i < steps; i += 2) hihat[i] = 1;
+  } else if (style === "shuffle") {
+    // blues: "tren" ritmi -- daha yoğun ve gruv'lu kick kalıbı
+    [0, 6, 8, 14].forEach((i) => (kick[i] = 1));
+    snare[4] = 1; snare[12] = 1;
     for (let i = 0; i < steps; i += 3) hihat[i] = 1;
   } else if (style === "syncopated") {
     [0, 3, 6, 10, 13].forEach((i) => (kick[i] = 1));
@@ -287,11 +293,86 @@ function buildDrumPattern(style, steps = 16) {
   return { kick, snare, hihat };
 }
 
+// ---------- tarza göre akor çalma ritmi ----------
+// "sustained": tek uzun akor (soft). "chug": rock/metal power-chord vuruşları.
+// "pulse": dj/pop dörtlük vuruşlar. "comp": jazz/blues senkoplu vuruşlar.
+// "arpeggio": anadolu rock -- akor tek tek arpej olarak çalınır.
+const CHORD_RHYTHM_STEPS = {
+  sustained: null, // özel: ölçü başına tek "1m" vuruş
+  chug: [0, 2, 4, 6, 8, 10, 12, 14],
+  pulse: [0, 4, 8, 12],
+  comp: [2, 6, 10, 14],
+  arpeggio: null, // özel: akor notaları tek tek dağıtılır
+};
+
+function measureTime(measure, stepInMeasure) {
+  const beat = Math.floor(stepInMeasure / 4);
+  const sixteenth = stepInMeasure % 4;
+  return `${measure}:${beat}:${sixteenth}`;
+}
+
+function buildChordEvents(params) {
+  const events = [];
+  const rhythmKind = params.chordRhythm || "sustained";
+
+  params.progression.forEach((chordMidis, measure) => {
+    const chordNotes = chordMidis.map(midiToNoteName);
+
+    if (rhythmKind === "sustained") {
+      events.push([`${measure}:0:0`, { notes: chordNotes, duration: "1m" }]);
+    } else if (rhythmKind === "arpeggio") {
+      // her vuruşta akordan bir sonraki notaya geç -> saz/bağlama benzeri his
+      [0, 4, 8, 12].forEach((step, i) => {
+        const note = chordNotes[i % chordNotes.length];
+        events.push([measureTime(measure, step), { notes: [note], duration: "8n" }]);
+      });
+    } else {
+      const steps = CHORD_RHYTHM_STEPS[rhythmKind] || [0];
+      steps.forEach((step) => {
+        events.push([measureTime(measure, step), { notes: chordNotes, duration: "8n" }]);
+      });
+    }
+  });
+
+  return events;
+}
+
 function disposeDrums() {
   [kickSeq, snareSeq, hihatSeq, kickSynth, snareSynth, hihatSynth].forEach((node) => {
     if (node) node.dispose();
   });
   kickSeq = snareSeq = hihatSeq = kickSynth = snareSynth = hihatSynth = null;
+}
+
+// ---------- tarza göre akor (eşlik) synth'i ----------
+
+function createChordSynth(genre, leadSynth) {
+  switch (genre) {
+    case "rock":
+    case "heavy_metal":
+      return leadSynth; // aynı (distortion'lı) gitar sesini akor "chug"ları için de kullan
+    case "pop":
+    case "dj":
+      return new Tone.PolySynth(Tone.Synth, {
+        oscillator: { type: "square" },
+        envelope: { attack: 0.005, decay: 0.15, sustain: 0.4, release: 0.3 },
+        volume: -8,
+      }).toDestination();
+    case "jazz":
+    case "blues":
+      return new Tone.PolySynth(Tone.AMSynth, {
+        envelope: { attack: 0.01, decay: 0.2, sustain: 0.3, release: 0.5 },
+        volume: -10,
+      }).toDestination();
+    case "anadolu_rock":
+      return new Tone.PolySynth(Tone.Synth, {
+        oscillator: { type: "triangle" },
+        envelope: { attack: 0.005, decay: 0.3, sustain: 0.1, release: 0.4 },
+        volume: -8,
+      }).toDestination();
+    default: // soft
+      return new Tone.PolySynth(Tone.AMSynth, { volume: -10 }).toDestination();
+  }
 }
 
 // ---------- Tone.js oynatma ----------
@@ -302,8 +383,10 @@ async function buildPlayback(params) {
   Tone.Transport.cancel();
   if (sequence) sequence.dispose();
   if (chordPart) chordPart.dispose();
+  // rock/metal'de padSynth, lead synth ile aynı nesne olabilir (bkz.
+  // createChordSynth) -- aynı nesneyi iki kez dispose etmemek için kontrol
+  if (padSynth && padSynth !== synth) padSynth.dispose();
   if (synth) synth.dispose();
-  if (padSynth) padSynth.dispose();
   if (filter) filter.dispose();
   if (distortion) distortion.dispose();
   disposeDrums();
@@ -323,7 +406,7 @@ async function buildPlayback(params) {
     synth = createMelodySynth(params.genre).connect(filter);
   }
 
-  padSynth = new Tone.PolySynth(Tone.AMSynth, { volume: -10 }).toDestination();
+  padSynth = createChordSynth(params.genre, synth);
 
   if (!analyser) {
     analyser = new Tone.Analyser("waveform", 256);
@@ -354,14 +437,11 @@ async function buildPlayback(params) {
     "16n"
   );
 
-  // akor ilerlemesi: fon dokusu, her ölçüde bir akor
-  const chordEvents = params.progression.map((chordMidis, i) => [
-    `${i}m`,
-    chordMidis.map(midiToNoteName),
-  ]);
-  chordPart = new Tone.Part((time, chord) => {
+  // akor eşliği: tarza göre chug/pulse/comp/arpej/sustained kalıbıyla çalınır
+  const chordEvents = buildChordEvents(params);
+  chordPart = new Tone.Part((time, value) => {
     try {
-      padSynth.triggerAttackRelease(chord, "1m", time);
+      padSynth.triggerAttackRelease(value.notes, value.duration, time);
     } catch (e) {
       /* eski kurulumdan kalan çağrı, yok say */
     }

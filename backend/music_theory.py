@@ -27,48 +27,56 @@ GENRE_PROFILES = {
         "tempo_range": (70, 160),
         "rhythm_style": "straight",
         "chord_style": "triad",
+        "chord_rhythm": "sustained",
     },
     "rock": {
         "scale_pool": ["pentatonic_minor", "minor", "major"],
         "tempo_range": (110, 150),
         "rhythm_style": "backbeat",
         "chord_style": "power",
+        "chord_rhythm": "chug",
     },
     "anadolu_rock": {
         "scale_pool": ["dorian", "minor", "phrygian"],
         "tempo_range": (90, 130),
         "rhythm_style": "syncopated",
         "chord_style": "triad",
+        "chord_rhythm": "arpeggio",
     },
     "heavy_metal": {
         "scale_pool": ["phrygian", "minor"],
         "tempo_range": (140, 180),
         "rhythm_style": "double_kick",
         "chord_style": "power",
+        "chord_rhythm": "chug",
     },
     "jazz": {
         "scale_pool": ["dorian", "lydian", "major"],
         "tempo_range": (90, 140),
         "rhythm_style": "swing",
         "chord_style": "seventh",
+        "chord_rhythm": "comp",
     },
     "pop": {
         "scale_pool": ["major", "pentatonic_major"],
         "tempo_range": (100, 128),
-        "rhythm_style": "four_on_floor",
+        "rhythm_style": "backbeat",
         "chord_style": "triad",
+        "chord_rhythm": "pulse",
     },
     "blues": {
         "scale_pool": ["blues", "pentatonic_minor"],
         "tempo_range": (70, 110),
         "rhythm_style": "shuffle",
         "chord_style": "seventh",
+        "chord_rhythm": "comp",
     },
     "dj": {
         "scale_pool": ["minor", "pentatonic_minor", "major"],
         "tempo_range": (120, 135),
         "rhythm_style": "four_on_floor",
         "chord_style": "triad",
+        "chord_rhythm": "pulse",
     },
 }
 
@@ -163,6 +171,43 @@ def generate_melody(scale_notes: list[int], length: int = 16,
     return melody
 
 
+def generate_melody_over_progression(scale_notes: list[int], progression_midi: list[list[int]],
+                                      steps_per_measure: int = 16, step_bias: float = 0.7,
+                                      seed: int | None = None) -> list[int]:
+    """Melodiyi TÜM akor ilerlemesi boyunca (her akor için bir ölçü) üretir —
+    kısa bir döngüyü akor değişse de tekrar tekrar çalmak yerine, melodi artık
+    akor ilerlemesiyle aynı uzunlukta ve onunla birlikte döngüleniyor.
+
+    Her ölçünün ilk adımında (güçlü vuruş), melodi o anki akorun bir notasına
+    "yakınsatılıyor" -> melodi ile akor arasındaki uyumsuzluk/çakışma hissi
+    büyük ölçüde azalıyor. Ölçü içindeki diğer adımlarda eski adım-öncelikli
+    rastgele yürüyüş devam ediyor.
+    """
+    rng = random.Random(seed)
+    melody: list[int] = []
+    idx = len(scale_notes) // 2
+
+    for chord in progression_midi:
+        chord_tone_classes = {n % 12 for n in chord}
+
+        for step in range(steps_per_measure):
+            if step == 0:
+                # güçlü vuruş: gam içinde bu akora ait en yakın notaya geç
+                candidates = [i for i, n in enumerate(scale_notes) if n % 12 in chord_tone_classes]
+                if candidates:
+                    idx = min(candidates, key=lambda i: abs(i - idx))
+            else:
+                if rng.random() < step_bias:
+                    step_move = rng.choice([-1, 1])
+                else:
+                    step_move = rng.choice([-3, -2, 2, 3])
+                idx = max(0, min(len(scale_notes) - 1, idx + step_move))
+
+            melody.append(scale_notes[idx])
+
+    return melody
+
+
 def euclidean_rhythm(pulses: int, steps: int) -> list[int]:
     """Bjorklund algoritmasının basit hali: N vuruşu M adıma eşit dağıtır."""
     pattern = []
@@ -248,12 +293,19 @@ def generate_music(features: dict, regenerate: bool = True, genre: str = "soft")
     root_midi = 60 + int((features["dominant_hue"] / 179) * 12)  # C4 civarı, hue'ya göre kaydır
     scale_notes = get_scale_notes(root_midi, scale_name, octave_range=2)
 
-    melody = generate_melody(scale_notes, length=16, step_bias=0.7, seed=variation_seed)
-    rhythm = generate_rhythm(features["edge_density"], seed=variation_seed, style=rhythm_style)
+    # ÖNCE akor ilerlemesi belirlenir, melodi SONRA bu akorlara göre üretilir
+    # -> melodi artık akor değiştikçe ona uyum sağlıyor, kısa bir döngüyü
+    # değişen akorların üzerinde körlemesine tekrar etmiyor.
     progression_roman = pick_progression(scale_name, seed=mood_seed)
     progression_midi = [
         roman_to_chord(r, root_midi, scale_notes, chord_style) for r in progression_roman
     ]
+
+    melody = generate_melody_over_progression(
+        scale_notes, progression_midi, steps_per_measure=16, step_bias=0.7, seed=variation_seed
+    )
+    rhythm = generate_rhythm(features["edge_density"], seed=variation_seed,
+                              steps=len(melody), style=rhythm_style)
 
     tempo = int(tempo_min + (features["brightness"] / 255) * (tempo_max - tempo_min))
     filter_cutoff = int(200 + features["saturation"] * 8)   # ~200-2240 Hz
@@ -266,6 +318,7 @@ def generate_music(features: dict, regenerate: bool = True, genre: str = "soft")
         "filterCutoff": filter_cutoff,
         "rhythmStyle": rhythm_style,
         "chordStyle": chord_style,
+        "chordRhythm": profile.get("chord_rhythm", "sustained"),
         "swing": swing,
         "melody": melody,
         "rhythm": rhythm,
