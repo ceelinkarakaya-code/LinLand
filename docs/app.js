@@ -1,5 +1,5 @@
 // Backend'inizi deploy ettikten sonra bu adresi güncelleyin.
-const API_URL = window.API_URL || "http://localhost:8000";
+   const API_URL = window.API_URL || "https://linland.onrender.com";
 
 const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 
@@ -118,9 +118,13 @@ function resizeImage(file, maxDimension) {
 
 // ---------- backend isteği ----------
 
-async function analyzeAndLoad(regenerate) {
+async function analyzeAndLoad(regenerate, attempt = 1) {
   if (!currentFile) return;
-  setStatus("sunucuya bağlanılıyor… (ilk istekte 30-60 sn sürebilir)");
+  setStatus(
+    attempt === 1
+      ? "sunucuya bağlanılıyor… (ilk istekte 30-60 sn sürebilir)"
+      : `yeniden deneniyor… (${attempt}. deneme)`
+  );
   disableControls();
 
   const form = new FormData();
@@ -149,11 +153,23 @@ async function analyzeAndLoad(regenerate) {
   } catch (err) {
     clearTimeout(timeoutId);
     console.error(err);
-    if (err.name === "AbortError") {
-      setStatus("sunucu yanıt vermedi, lütfen tekrar deneyin");
-    } else {
-      setStatus(`hata: ${err.message}`);
+
+    // "Load failed" / genel ağ hataları genelde Render'ın uyanma anındaki
+    // geçici bağlantı kopmalarından kaynaklanır. AbortError (bizim 100sn'lik
+    // zaman aşımımız) hariç, ilk 2 denemede otomatik olarak tekrar deneriz.
+    const isTransientNetworkError = err.name !== "AbortError";
+    if (isTransientNetworkError && attempt < 3) {
+      setTimeout(() => analyzeAndLoad(regenerate, attempt + 1), 3000);
+      return;
     }
+
+    if (err.name === "AbortError") {
+      setStatus("sunucu yanıt vermedi — 'yeniden karıştır'a basıp tekrar deneyin");
+    } else {
+      setStatus(`bağlantı sorunu (${err.message}) — 'yeniden karıştır'a basıp tekrar deneyin`);
+    }
+    // hata sonrası kullanıcının elle tekrar deneyebilmesi için buton açık kalsın
+    el.btnRemix.disabled = false;
   }
 }
 
