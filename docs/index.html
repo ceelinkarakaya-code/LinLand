@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Karanlık Oda — Fotoğraftan Müzik</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="darkroom">
+
+    <header class="masthead">
+      <h1>Karanlık Oda</h1>
+      <p class="masthead-sub">Gözlerini kapat, anıların çalsın.</p>
+    </header>
+
+    <main class="tray-row">
+
+      <!-- SOL: yükleme / banyo tepsisi -->
+      <section class="tray" id="dropzone">
+        <div class="tray-liquid"></div>
+        <img id="preview" class="tray-photo" alt="" hidden />
+        <div class="tray-hint" id="tray-hint">
+          <span>bir fotoğraf sürükleyin</span>
+          <span class="tray-hint-or">— ya da —</span>
+          <label class="tray-button">
+            dosya seçin
+            <input type="file" id="file-input" accept="image/*" hidden />
+          </label>
+        </div>
+      </section>
+
+      <!-- SAĞ: pozometre / analiz kadranı -->
+      <section class="meter-panel">
+        <div class="meter-row">
+          <span class="meter-label">tempo</span>
+          <span class="meter-value" id="val-tempo">—</span>
+          <span class="meter-unit">bpm</span>
+        </div>
+        <div class="meter-row">
+          <span class="meter-label">gam</span>
+          <span class="meter-value" id="val-scale">—</span>
+        </div>
+        <div class="meter-row">
+          <span class="meter-label">filtre</span>
+          <span class="meter-value" id="val-filter">—</span>
+          <span class="meter-unit">hz</span>
+        </div>
+        <div class="meter-row">
+          <span class="meter-label">kök nota</span>
+          <span class="meter-value" id="val-root">—</span>
+        </div>
+
+        <div class="swatches" id="swatches"></div>
+      </section>
+
+    </main>
+
+    <!-- dalga formu şeridi -->
+    <canvas id="waveform" class="waveform" height="72"></canvas>
+
+    <!-- bant makarası kontrol konsolu -->
+    <footer class="console">
+      <button id="btn-play" class="reel-button" disabled>çal</button>
+      <button id="btn-stop" class="reel-button" disabled>durdur</button>
+      <button id="btn-remix" class="reel-button reel-button--accent" disabled>yeniden karıştır</button>
+      <span class="console-status" id="status-text">bir fotoğraf bekleniyor</span>
+    </footer>
+
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
