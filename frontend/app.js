@@ -337,10 +337,17 @@ async function buildPlayback(params) {
   sequence = new Tone.Sequence(
     (time, active) => {
       if (active) {
-        const humanizedTime = time + (Math.random() * 0.02 - 0.01);
-        const velocity = 0.7 + (Math.random() * 0.16 - 0.08);
-        synth.triggerAttackRelease(noteNames[noteIndex % noteNames.length], "16n", humanizedTime, velocity);
-        noteIndex++;
+        // önceki kurulumdan kalan gecikmeli bir çağrı synth'i "disposed"
+        // bulabilir (özellikle çalarken "yeniden karıştır"a basıldığında);
+        // bu durumda hatayı sessizce yutup bir sonraki adıma geçiyoruz.
+        try {
+          const humanizedTime = time + (Math.random() * 0.02 - 0.01);
+          const velocity = 0.7 + (Math.random() * 0.16 - 0.08);
+          synth.triggerAttackRelease(noteNames[noteIndex % noteNames.length], "16n", humanizedTime, velocity);
+          noteIndex++;
+        } catch (e) {
+          /* eski kurulumdan kalan çağrı, yok say */
+        }
       }
     },
     params.rhythm,
@@ -353,7 +360,11 @@ async function buildPlayback(params) {
     chordMidis.map(midiToNoteName),
   ]);
   chordPart = new Tone.Part((time, chord) => {
-    padSynth.triggerAttackRelease(chord, "1m", time);
+    try {
+      padSynth.triggerAttackRelease(chord, "1m", time);
+    } catch (e) {
+      /* eski kurulumdan kalan çağrı, yok say */
+    }
   }, chordEvents);
   chordPart.loop = true;
   chordPart.loopEnd = `${params.progression.length}m`;
@@ -374,15 +385,33 @@ async function buildPlayback(params) {
     }).toDestination();
 
     kickSeq = new Tone.Sequence((time, active) => {
-      if (active) kickSynth.triggerAttackRelease("C1", "8n", time);
+      if (active) {
+        try {
+          kickSynth.triggerAttackRelease("C1", "8n", time);
+        } catch (e) {
+          /* eski kurulumdan kalan çağrı, yok say */
+        }
+      }
     }, kick, "16n");
 
     snareSeq = new Tone.Sequence((time, active) => {
-      if (active) snareSynth.triggerAttackRelease("16n", time);
+      if (active) {
+        try {
+          snareSynth.triggerAttackRelease("16n", time);
+        } catch (e) {
+          /* eski kurulumdan kalan çağrı, yok say */
+        }
+      }
     }, snare, "16n");
 
     hihatSeq = new Tone.Sequence((time, active) => {
-      if (active) hihatSynth.triggerAttackRelease("32n", time);
+      if (active) {
+        try {
+          hihatSynth.triggerAttackRelease("32n", time);
+        } catch (e) {
+          /* eski kurulumdan kalan çağrı, yok say */
+        }
+      }
     }, hihat, "16n");
 
     kickSeq.start(0);
