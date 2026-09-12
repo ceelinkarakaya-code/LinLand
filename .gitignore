@@ -1,0 +1,13 @@
+# Python
+backend/venv/
+backend/__pycache__/
+backend/**/__pycache__/
+*.pyc
+
+# İşletim sistemi
+.DS_Store
+Thumbs.db
+
+# Editör
+.vscode/
+.idea/
