@@ -62,7 +62,7 @@ function handleFile(file) {
 
 async function analyzeAndLoad(regenerate) {
   if (!currentFile) return;
-  setStatus("banyo ediliyor…");
+  setStatus("Melodiniz oluşturuluyor…");
   disableControls();
 
   const form = new FormData();
