@@ -15,6 +15,71 @@ SCALES = {
     "pentatonic_minor": [0, 3, 5, 7, 10],
     "dorian": [0, 2, 3, 5, 7, 9, 10],
     "lydian": [0, 2, 4, 6, 7, 9, 11],
+    "phrygian": [0, 1, 3, 5, 7, 8, 10],
+    "blues": [0, 3, 5, 6, 7, 10],
+}
+
+# Her tarz için: hangi gamlar tercih edilsin, tempo aralığı, ritim karakteri,
+# akor yapısı (triad / power / seventh). "soft" mevcut varsayılan davranışı korur.
+GENRE_PROFILES = {
+    "soft": {
+        "scale_pool": None,  # None -> pick_scale'in eski hue-tabanlı mantığı çalışır
+        "tempo_range": (70, 160),
+        "rhythm_style": "straight",
+        "chord_style": "triad",
+    },
+    "rock": {
+        "scale_pool": ["pentatonic_minor", "minor", "major"],
+        "tempo_range": (110, 150),
+        "rhythm_style": "backbeat",
+        "chord_style": "power",
+    },
+    "anadolu_rock": {
+        "scale_pool": ["dorian", "minor", "phrygian"],
+        "tempo_range": (90, 130),
+        "rhythm_style": "syncopated",
+        "chord_style": "triad",
+    },
+    "heavy_metal": {
+        "scale_pool": ["phrygian", "minor"],
+        "tempo_range": (140, 180),
+        "rhythm_style": "double_kick",
+        "chord_style": "power",
+    },
+    "jazz": {
+        "scale_pool": ["dorian", "lydian", "major"],
+        "tempo_range": (90, 140),
+        "rhythm_style": "swing",
+        "chord_style": "seventh",
+    },
+    "pop": {
+        "scale_pool": ["major", "pentatonic_major"],
+        "tempo_range": (100, 128),
+        "rhythm_style": "four_on_floor",
+        "chord_style": "triad",
+    },
+    "blues": {
+        "scale_pool": ["blues", "pentatonic_minor"],
+        "tempo_range": (70, 110),
+        "rhythm_style": "shuffle",
+        "chord_style": "seventh",
+    },
+    "dj": {
+        "scale_pool": ["minor", "pentatonic_minor", "major"],
+        "tempo_range": (120, 135),
+        "rhythm_style": "four_on_floor",
+        "chord_style": "triad",
+    },
+}
+
+SWING_BY_STYLE = {
+    "straight": 0.0,
+    "backbeat": 0.0,
+    "four_on_floor": 0.0,
+    "double_kick": 0.0,
+    "syncopated": 0.12,
+    "swing": 0.35,
+    "shuffle": 0.3,
 }
 
 PROGRESSION_POOLS = {
@@ -38,7 +103,7 @@ ROMAN_MAP = {
     "IV": (3, "major"), "iv": (3, "minor"),
     "V": (4, "major"), "v": (4, "minor"),
     "vi": (5, "minor"), "VI": (5, "major"),
-    "VII": (6, "major"),
+    "VII": (6, "major"), "III": (2, "major"),
 }
 
 
@@ -48,7 +113,18 @@ def _seed_from(*parts) -> int:
     return int(h[:8], 16)
 
 
-def pick_scale(features: dict) -> str:
+def pick_scale(features: dict, genre: str = "soft") -> str:
+    profile = GENRE_PROFILES.get(genre, GENRE_PROFILES["soft"])
+    pool = profile.get("scale_pool")
+
+    if pool:
+        # tarz belirli bir gam havuzuna sahipse, hue bu havuz içinde hangi
+        # gamın seçileceğini belirler (yine görsele bağlı, ama tarza uygun)
+        hue = features["dominant_hue"]
+        idx = int((hue / 179) * len(pool)) % len(pool)
+        return pool[idx]
+
+    # "soft" tarzı: eski hue-tabanlı serbest seçim
     hue = features["dominant_hue"]  # 0-179
     sat = features["saturation"]
     if sat < 60:
@@ -101,9 +177,18 @@ def euclidean_rhythm(pulses: int, steps: int) -> list[int]:
     return pattern
 
 
-def generate_rhythm(edge_density: float, seed: int | None = None, steps: int = 16) -> list[int]:
+def generate_rhythm(edge_density: float, seed: int | None = None, steps: int = 16,
+                     style: str = "straight") -> list[int]:
     rng = random.Random(seed)
-    pulses = max(2, min(steps - 1, round(edge_density * steps * 1.5)))
+
+    if style == "double_kick":
+        density_multiplier = 1.8
+    elif style in ("four_on_floor", "backbeat"):
+        density_multiplier = 1.3
+    else:
+        density_multiplier = 1.5
+
+    pulses = max(2, min(steps - 1, round(edge_density * steps * density_multiplier)))
     base = euclidean_rhythm(pulses, steps)
     # %15 ihtimalle bir adımı çevir -> hafif "insan" varyasyonu
     return [b if rng.random() > 0.15 else 1 - b for b in base]
@@ -111,54 +196,77 @@ def generate_rhythm(edge_density: float, seed: int | None = None, steps: int = 1
 
 def pick_progression(scale_name: str, seed: int | None = None) -> list[str]:
     rng = random.Random(seed)
-    family = "major" if scale_name in ("major", "lydian") else "minor"
+    major_family_scales = ("major", "lydian", "pentatonic_major")
+    family = "major" if scale_name in major_family_scales else "minor"
     pool = PROGRESSION_POOLS[family]
     return rng.choice(pool)
 
 
-def roman_to_chord(roman: str, root_midi: int, scale_notes: list[int]) -> list[int]:
-    """Roma rakamını, gam derecelerinden bir üçlü (triad) akora çevirir."""
+def roman_to_chord(roman: str, root_midi: int, scale_notes: list[int],
+                    chord_style: str = "triad") -> list[int]:
+    """Roma rakamını akora çevirir. chord_style: triad / power / seventh."""
     degree, quality = ROMAN_MAP[roman]
     base_octave_notes = scale_notes[: len(scale_notes) // 2]  # ilk oktav
     root = base_octave_notes[degree % len(base_octave_notes)]
 
     third = 4 if quality == "major" else 3
     fifth = 7
-    return [root, root + third, root + fifth]
+
+    if chord_style == "power":
+        return [root, root + fifth]  # power chord: 3'süz, rock/metal karakteri
+
+    chord = [root, root + third, root + fifth]
+    if chord_style == "seventh":
+        seventh = 10  # küçük yedili -> jazz/blues'ta yaygın "dominant/min7" hissi
+        chord.append(root + seventh)
+    return chord
 
 
-def generate_music(features: dict, regenerate: bool = True) -> dict:
+def generate_music(features: dict, regenerate: bool = True, genre: str = "soft") -> dict:
     """Ana giriş noktası: görsel özellikleri tam bir müzik JSON'una çevirir.
 
-    - mood_seed: fotoğrafın kendisinden türetilir -> her zaman aynı "ruh hali"
-    - variation_seed: regenerate=True ise her çağrıda değişir -> melodi/ritim detayı farklılaşır
+    - mood_seed: fotoğraf + tarzdan türetilir -> aynı fotoğraf+tarz kombinasyonu
+      her zaman aynı "ruh hali"nde kalır (akor ilerlemesi bu seed'i kullanır)
+    - variation_seed: regenerate=True ise her çağrıda değişir -> melodi/ritim
+      detayı farklılaşır, ama tempo/gam/akor karakteri (tarz) sabit kalır
     """
+    profile = GENRE_PROFILES.get(genre, GENRE_PROFILES["soft"])
+    tempo_min, tempo_max = profile["tempo_range"]
+    rhythm_style = profile["rhythm_style"]
+    chord_style = profile["chord_style"]
+    swing = SWING_BY_STYLE.get(rhythm_style, 0.0)
+
     mood_seed = _seed_from(
         round(features["dominant_hue"]),
         round(features["brightness"]),
         round(features["saturation"]),
+        genre,
     )
     variation_seed = random.randint(0, 999_999) if regenerate else mood_seed
 
-    scale_name = pick_scale(features)
+    scale_name = pick_scale(features, genre)
     root_midi = 60 + int((features["dominant_hue"] / 179) * 12)  # C4 civarı, hue'ya göre kaydır
     scale_notes = get_scale_notes(root_midi, scale_name, octave_range=2)
 
     melody = generate_melody(scale_notes, length=16, step_bias=0.7, seed=variation_seed)
-    rhythm = generate_rhythm(features["edge_density"], seed=variation_seed)
+    rhythm = generate_rhythm(features["edge_density"], seed=variation_seed, style=rhythm_style)
     progression_roman = pick_progression(scale_name, seed=mood_seed)
     progression_midi = [
-        roman_to_chord(r, root_midi, scale_notes) for r in progression_roman
+        roman_to_chord(r, root_midi, scale_notes, chord_style) for r in progression_roman
     ]
 
-    tempo = int(70 + (features["brightness"] / 255) * 90)  # 70-160 BPM
+    tempo = int(tempo_min + (features["brightness"] / 255) * (tempo_max - tempo_min))
     filter_cutoff = int(200 + features["saturation"] * 8)   # ~200-2240 Hz
 
     return {
+        "genre": genre,
         "tempo": tempo,
         "scale": scale_name,
         "rootMidi": root_midi,
         "filterCutoff": filter_cutoff,
+        "rhythmStyle": rhythm_style,
+        "chordStyle": chord_style,
+        "swing": swing,
         "melody": melody,
         "rhythm": rhythm,
         "progression": progression_midi,

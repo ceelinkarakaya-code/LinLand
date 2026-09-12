@@ -31,14 +31,23 @@ def health():
     return {"status": "ok"}
 
 
+ALLOWED_GENRES = {
+    "soft", "rock", "anadolu_rock", "heavy_metal", "jazz", "pop", "blues", "dj",
+}
+
+
 @app.post("/analyze")
 async def analyze(
     file: UploadFile = File(...),
     regenerate: bool = Query(True, description="False ise aynı melodiyi tekrar üretir"),
+    genre: str = Query("soft", description="Müzik tarzı: soft/rock/anadolu_rock/heavy_metal/jazz/pop/blues/dj"),
 ):
     suffix = Path(file.filename or "").suffix.lower()
     if suffix not in ALLOWED_EXTENSIONS:
         raise HTTPException(400, f"Desteklenmeyen dosya türü: {suffix}")
+
+    if genre not in ALLOWED_GENRES:
+        raise HTTPException(400, f"Desteklenmeyen tarz: {genre}")
 
     with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
         shutil.copyfileobj(file.file, tmp)
@@ -46,7 +55,7 @@ async def analyze(
 
     try:
         features = analyze_image(tmp_path)
-        music_params = generate_music(features, regenerate=regenerate)
+        music_params = generate_music(features, regenerate=regenerate, genre=genre)
     finally:
         Path(tmp_path).unlink(missing_ok=True)
 
