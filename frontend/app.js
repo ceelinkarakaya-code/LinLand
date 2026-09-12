@@ -1,5 +1,5 @@
 // Backend'inizi deploy ettikten sonra bu adresi güncelleyin.
-const API_URL = window.API_URL || "http://localhost:8000";
+const API_URL = window.API_URL || "https://linland.onrender.com";
 
 const NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
 
